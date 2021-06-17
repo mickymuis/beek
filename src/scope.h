@@ -22,18 +22,18 @@ enum scope_channelDrawStyle {
 
 typedef struct scope_t scope_t;
 
-/** Create a new scope with @nchannels number of channels */
+/** Create a new scope with @nchannels number of channels, associated with rendering context @render.*/
 scope_t*
-scope_create( unsigned int nchannels );
+scope_create( unsigned int nchannels, SDL_Renderer* render );
 
 /** Destroy @scope and free all associated memory including the channels and buffers */
 void
 scope_destroy( scope_t* scope );
 
-/** Sets the number of samples per second to @speed. 
+/** Sets the number of samples per second to @freq. 
     The view will move at this rate and scope_update() will consume samples at this rate */
 void
-scope_setSpeed( scope_t* scope, unsigned int speed );
+scope_setFrequency( scope_t* scope, unsigned int freq );
 
 /** Initialize channel @chan to @mode. Calls to this function causes the view to reset,
     and internal buffers are reallocated appropriately. */
@@ -60,10 +60,16 @@ scope_setChannelDrawStyle( scope_t* scope, unsigned int chan, int style );
 void
 scope_drawGrid( SDL_Renderer* render, SDL_Rect r, int vdiv );
 
-/** Draw channel @chan to @render. This function only draws the channel contents and does not sample new values into the buffer */
+/** Draw channel @chan. This function only draws the channel contents and does not sample new values into the buffer */
 void
-scope_drawChannel( scope_t* scope, unsigned int chan, SDL_Renderer* render );
+scope_drawChannel( scope_t* scope, unsigned int chan );
 
+/** Sets the rectangle where @scope should be drawn. If @area is different from the previously stored rect,
+    this function re-allocates and renders any static elements (such as grids).*/ 
+void
+scope_updateDrawingArea( scope_t* scope, SDL_Rect area );
+
+/** Updates channel @chan without drawing it. */
 void
 scope_updateChannel( scope_t* scope, unsigned int chan );
 
@@ -72,6 +78,6 @@ scope_updateChannel( scope_t* scope, unsigned int chan );
     Channels that have SCOPE_CHANNEL_STREAM set will also consume samples from the internal FIFO according to the elapsed time.
 */
 void
-scope_update( scope_t* scope, SDL_Renderer* render, SDL_Rect area );
+scope_update( scope_t* scope );
 
 #endif

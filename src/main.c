@@ -15,7 +15,8 @@ update( window_t* win, SDL_Rect area ) {
 
     scope_pushChannelFifo( s, 1, (double)rand() / (double)RAND_MAX - .5);
 
-    scope_update( s, win->render, area );
+    scope_updateDrawingArea( s, area );
+    scope_update( s );
 };
 
 int
@@ -39,23 +40,23 @@ main( int argc, char**argv ) {
     free( s.data);*/
 
     sampler_setCyclic( s, true );
+    
+    window_t win;
+    window_init( &win );
+    if( window_create( &win ) != 0 ) {
+        fprintf( stderr, "Could not open a new window" );
+        return -1;
+    }
 
-    scope_t* scope = scope_create( 2 );
-    scope_setSpeed( scope, 500 );
+    scope_t* scope = scope_create( 2, win.render );
+    scope_setFrequency( scope, 500 );
     scope_initChannel( scope, 0, SCOPE_CHANNEL_STATIC );
     scope_setChannelBuffer( scope, 0, s );
     scope_setChannelDrawStyle( scope, 0, SCOPE_CHANNEL_LINES );
     scope_initChannel( scope, 1, SCOPE_CHANNEL_STREAM );
 
-    window_t win;
-    window_init( &win );
     win.on_redraw = (window_renderfunc_t)&update;
     win.user =scope;
-
-    if( window_create( &win ) != 0 ) {
-        fprintf( stderr, "Could not open a new window" );
-        return -1;
-    }
     window_mainloop( &win );
     window_destroy( &win );
     scope_destroy( scope );

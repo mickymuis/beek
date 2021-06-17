@@ -4,6 +4,8 @@
 #include <assert.h>
 #include <inttypes.h>
 
+#include "SDL_FontCache/SDL_FontCache.h"
+
 #define SDL_RECT_EQ(a,b) (a.x==b.x && a.y==b.y && a.w==b.w && a.h==b.h)
 
 typedef struct {
@@ -21,15 +23,17 @@ typedef struct {
 struct scope_t {
     schannel_t* channel;
     unsigned int nchannels;
-    unsigned int speed; // samples/s
+    unsigned int freq; // samples/s
     SDL_Rect area;
     SDL_Texture* backdrop;
+    SDL_Renderer* render;
+    FC_Font* font;
     uint64_t time;
     double elapsed, ticksPerSec;
 };
 
 scope_t*
-scope_create( unsigned int nchannels ) {
+scope_create( unsigned int nchannels, SDL_Renderer* render ) {
     scope_t* s   = malloc( sizeof(scope_t) );
     assert( s );
     memset( s, 0, sizeof( scope_t ) );
@@ -41,6 +45,11 @@ scope_create( unsigned int nchannels ) {
         scope_initChannel( s, i, SCOPE_CHANNEL_NONE );
 
     s->ticksPerSec = (double)SDL_GetPerformanceFrequency();
+    s->render      = render;
+    s->font        = FC_CreateFont();
+
+    FC_LoadFont( s->font, s->render, "src/SDL_FontCache/test/fonts/FreeSans.ttf", 12, FC_MakeColor(200,200,200,255), TTF_STYLE_NORMAL );
+    
     return s;
 }
 
@@ -58,13 +67,15 @@ scope_destroy( scope_t* s ) {
         }
         free( s->channel );
     }
+    if( s->font != NULL )
+        FC_FreeFont( s->font );
     free( s );
 }
 
 void
-scope_setSpeed( scope_t* scope, unsigned int speed ) {
+scope_setFrequency( scope_t* scope, unsigned int freq ) {
     assert( scope );
-    scope->speed = speed;
+    scope->freq = freq;
 }
 
 void
@@ -116,39 +127,6 @@ scope_pushChannelFifo( scope_t* scope, unsigned int chan, double sample ) {
 }
 
 void
-scope_updateChannel( scope_t* scope, unsigned int chan ) {
-    schannel_t* c =&scope->channel[chan];
-    if( c->mode == SCOPE_CHANNEL_NONE ) return;
-
-    // Compute the amount of samples that the view has shifted since the last draw
-    c->hshift += (float)scope->speed * scope->elapsed;
-    // Whole number of new samples 
-    int delta = (int)c->hshift;
-    // Decimal part
-    c->hshift -= delta;
-    // Shift the offset into the sample array accordingly (wrap around if necessary)
-    //c->offset = (c->offset + delta) % sampler_length( c->sampler );
-
-    // Less than one new samples to consume, return
-    if( delta == 0 ) return;
-        
-    for( int i=0; i < delta; i++ ) {
-        double s =0.;
-        // Consume the sample from the appropriate buffer/fifo
-        if( c->mode == SCOPE_CHANNEL_STATIC ) {
-            s = sampler_getNext( c->sampler );
-        } else if( c->mode == SCOPE_CHANNEL_STREAM ) {
-            s = cfifo_take( c->sampleQueue );
-        }
-
-        // samplerBuffer will be used to draw the plot
-        cfifo_push( c->sampleBuffer, s );
-        if( cfifo_length( c->sampleBuffer ) > c->length )
-            cfifo_take( c->sampleBuffer );
-    }
-}
-
-void
 scope_setChannelDrawStyle( scope_t* scope, unsigned int chan, int style ) {
     assert( scope );
     if( chan >= scope->nchannels ) return;
@@ -189,12 +167,11 @@ scope_drawGrid( SDL_Renderer* render, SDL_Rect r, int vdiv ) {
 }
 
 void
-scope_drawChannel( scope_t* scope, unsigned int chan, SDL_Renderer* render ) {
+scope_drawChannel( scope_t* scope, unsigned int chan ) {
     schannel_t* c =&scope->channel[chan];
     if( c->mode == SCOPE_CHANNEL_NONE ) return;
     SDL_Rect r    =c->area;
 
-    double min =-.1, max =.1;
     float xStep =(float)r.w / (float)c->length;
     float yStep =(float)r.h / (c->max - c->min);
     float yMid =(float)r.y + yStep * c->max;
@@ -202,8 +179,17 @@ scope_drawChannel( scope_t* scope, unsigned int chan, SDL_Renderer* render ) {
     SDL_Point points[c->length];        // buffer the calls to SDL_RenderDrawPoint/Line
     size_t p =0;                        // n-th point
 
-    double damp =fmin( 1.0, 100. / fmin( c->length, cfifo_length( c->sampleBuffer ) ) ); // Dampening factor for auto-scaling
+    // Print the current max/min
+    FC_DrawAlign( scope->font, scope->render, 
+                  r.x + r.w-1, r.y+1, FC_ALIGN_RIGHT, 
+                  "Ymax=%.1f", c->max );
+    FC_DrawAlign( scope->font, scope->render, 
+                  r.x + r.w-1, r.y + r.h - 1 - FC_GetLineHeight( scope->font ), FC_ALIGN_RIGHT, 
+                  "Ymin=%.1f", c->min );
 
+    double damp =fmin( 1.0, 100. / fmin( c->length, cfifo_length( c->sampleBuffer ) ) ); // Dampening factor for auto-scaling
+    
+    double min =-0.1, max =0.1;
     for( size_t i =0; i < c->length; i++ ) {
         // Wrap the offset around if necessary
         //size_t idx = (c->offset + i) % sampler_length( c->sampler );
@@ -225,24 +211,105 @@ scope_drawChannel( scope_t* scope, unsigned int chan, SDL_Renderer* render ) {
         }
 
         // Adjust min and max, but try to avoid one single spike throwing the image off
-        if( val > 0 && val > max ) {
-            double f = fmin(1.0, (max / val)) * damp;
+        
+        if( val != 0 && val > max ) {
+            double f = fmin(1.0, (fabs(max) / fabs(val))) * damp;
             max =max * (1.-f) + val * f;
         }
-        else if( val < 0 && val < min ) {
-            double f = fmax(1.0, -(min / val)) * damp;
+        if( val != 0 && val < min ) {
+            double f = fmin(1.0, (fabs(min) / fabs(val))) * damp;
             min =min * (1.-f) + val * f;
         }
     }
 
     if( c->style == SCOPE_CHANNEL_LINES )
-        SDL_RenderDrawLines( render, points, p );
-    SDL_RenderDrawPoints( render, points, p );
+        SDL_RenderDrawLines( scope->render, points, p );
+    SDL_RenderDrawPoints( scope->render, points, p );
 
-    // Auto-zoom with damping/interpolation, factor in speed
-    damp *=scope->speed * 0.001;
+    // Auto-zoom with damping/interpolation, factor in freq
+    damp *=scope->freq * 0.001;
     c->max =c->max * (1.-damp) + max * damp;
     c->min =c->min * (1.-damp) + min * damp;
+}
+
+
+void
+scope_updateDrawingArea( scope_t* scope, SDL_Rect area ) {
+    // Window size or draw area has changed, we need to update the backdrop texture
+    if( !SDL_RECT_EQ( area, scope->area ) || scope->backdrop == NULL ) {
+
+        // Render the backdrop to a texture
+        if( scope->backdrop != NULL )
+            SDL_DestroyTexture( scope->backdrop );
+
+        scope->backdrop = SDL_CreateTexture( scope->render, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, area.w, area.h );
+        SDL_SetRenderTarget( scope->render, scope->backdrop );
+        SDL_SetRenderDrawColor( scope->render, 0x00, 0x00, 0x00, 0x00 );
+        SDL_RenderClear( scope->render );
+        
+        // First, calculate the positions of the channels
+        int pad =10;
+
+        int height = (area.h - pad) / scope->nchannels - pad;
+        int width = area.w - 2*pad;
+        int x =pad + area.x, y =pad + area.y;
+        for( int i =0; i < scope->nchannels; i++ ) {
+            //if( scope->channel[i].mode == SCOPE_CHANNEL_NONE ) continue; 
+            // Absolute position/size within the render area
+            SDL_Rect r = {x, y, width, height};
+            scope->channel[i].area =r;
+
+            // Render the frame and the grid for this channel to the texture
+            SDL_SetRenderDrawColor( scope->render, 15, 96, 63, SDL_ALPHA_OPAQUE );
+            scope_drawGrid( scope->render, r, 8 );
+            SDL_RenderDrawRect( scope->render, (SDL_Rect*)&r );
+        //    if( (int)yMid < r.y+r.h-10 && (int)yMid > r.y+10 )
+          //      SDL_RenderDrawLine( render, r.x, yMid, r.x+r.w, yMid );
+    
+            // Render the static text
+            FC_Draw( scope->font, scope->render, x+1, y+1, "%d/s", (int)scope->freq ); 
+            FC_DrawAlign( scope->font, scope->render, x + area.w/2, y+1, FC_ALIGN_CENTER, "Channel %d", i+1 );
+
+            y += height + pad;
+        }
+        scope->area =area;
+        
+        SDL_SetRenderTarget( scope->render, NULL );
+    }
+
+}
+
+void
+scope_updateChannel( scope_t* scope, unsigned int chan ) {
+    schannel_t* c =&scope->channel[chan];
+    if( c->mode == SCOPE_CHANNEL_NONE ) return;
+
+    // Compute the amount of samples that the view has shifted since the last draw
+    c->hshift += (float)scope->freq * scope->elapsed;
+    // Whole number of new samples 
+    int delta = (int)c->hshift;
+    // Decimal part
+    c->hshift -= delta;
+    // Shift the offset into the sample array accordingly (wrap around if necessary)
+    //c->offset = (c->offset + delta) % sampler_length( c->sampler );
+
+    // Less than one new samples to consume, return
+    if( delta == 0 ) return;
+        
+    for( int i=0; i < delta; i++ ) {
+        double s =0.;
+        // Consume the sample from the appropriate buffer/fifo
+        if( c->mode == SCOPE_CHANNEL_STATIC ) {
+            s = sampler_getNext( c->sampler );
+        } else if( c->mode == SCOPE_CHANNEL_STREAM ) {
+            s = cfifo_take( c->sampleQueue );
+        }
+
+        // samplerBuffer will be used to draw the plot
+        cfifo_push( c->sampleBuffer, s );
+        if( cfifo_length( c->sampleBuffer ) > c->length )
+            cfifo_take( c->sampleBuffer );
+    }
 }
 
 void
@@ -258,7 +325,7 @@ scope_computeElapsedTime( scope_t* scope ) {
 }
 
 void
-scope_update( scope_t* scope, SDL_Renderer* render, SDL_Rect area ) {
+scope_update( scope_t* scope ) {
     // Compute the time between this and the last call 
     scope_computeElapsedTime( scope );
     
@@ -266,50 +333,14 @@ scope_update( scope_t* scope, SDL_Renderer* render, SDL_Rect area ) {
     for( int i =0; i < scope->nchannels; i++ )
         scope_updateChannel( scope, i );
     
-    // Window size or draw area has changed, we need to update the backdrop texture
-    if( !SDL_RECT_EQ( area, scope->area ) || scope->backdrop == NULL ) {
-
-        // Render the backdrop to a texture
-        if( scope->backdrop != NULL )
-            SDL_DestroyTexture( scope->backdrop );
-
-        scope->backdrop = SDL_CreateTexture(render, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, area.w, area.h);
-        SDL_SetRenderTarget( render, scope->backdrop );
-        SDL_SetRenderDrawColor( render, 0x00, 0x00, 0x00, 0x00 );
-        SDL_RenderClear( render );
-        
-        // First, calculate the positions of the channels
-        int pad =10;
-
-        int height = (area.h - pad) / scope->nchannels - pad;
-        int width = area.w - 2*pad;
-        int x =pad + area.x, y =pad + area.y;
-        for( int i =0; i < scope->nchannels; i++ ) {
-            //if( scope->channel[i].mode == SCOPE_CHANNEL_NONE ) continue; 
-            // Absolute position/size within the render area
-            SDL_Rect r = {x, y, width, height};
-            scope->channel[i].area =r;
-
-            // Render the frame and the grid for this channel to the texture
-            SDL_SetRenderDrawColor( render, 15, 96, 63, SDL_ALPHA_OPAQUE );
-            scope_drawGrid( render, r, 8 );
-            SDL_RenderDrawRect( render, (SDL_Rect*)&r );
-        //    if( (int)yMid < r.y+r.h-10 && (int)yMid > r.y+10 )
-          //      SDL_RenderDrawLine( render, r.x, yMid, r.x+r.w, yMid );
-
-            y += height + pad;
-        }
-        scope->area =area;
-        
-        SDL_SetRenderTarget( render, NULL );
-    }
-
     // Draw the backdrop texture
-    SDL_RenderCopy( render, scope->backdrop, NULL, &area );
+    if( scope->backdrop != NULL )
+        SDL_RenderCopy( scope->render, scope->backdrop, NULL, &scope->area );
 
     // Draw the channels
-    SDL_SetRenderDrawColor( render, 15, 255, 63, SDL_ALPHA_OPAQUE );
+    SDL_SetRenderDrawColor( scope->render, 15, 255, 63, SDL_ALPHA_OPAQUE );
     for( int i =0; i < scope->nchannels; i++ )
-        scope_drawChannel( scope, i, render );
+        scope_drawChannel( scope, i );
+
 
 }
