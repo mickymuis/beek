@@ -61,3 +61,15 @@ dsp_removeWorker( dsp_t* dsp, dsp_worker_t* worker ) {
         }
     }
 }
+
+void
+dsp_tick( dsp_t* dsp ) {
+    double sample =sampler_getNext( dsp->sampler );
+    for( int i =0; i < dsp->workers_size; i++ ) {
+        dsp_worker_t *worker =dsp->workers[i];
+
+        worker->in[0] = sample;
+        worker->consume( worker );
+
+    }
+}

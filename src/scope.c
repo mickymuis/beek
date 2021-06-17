@@ -9,27 +9,30 @@
 #define SDL_RECT_EQ(a,b) (a.x==b.x && a.y==b.y && a.w==b.w && a.h==b.h)
 
 typedef struct {
-    int mode, style;
+    int        mode, style;
     sampler_t* sampler;
-    cfifo_t* sampleQueue;
-    cfifo_t* sampleBuffer;
-    float hshift;
-    size_t offset;
-    size_t length;
-    double min, max;
-    SDL_Rect area;
+    cfifo_t*   sampleQueue;
+    cfifo_t*   sampleBuffer;
+    float      hshift;
+    size_t     offset;
+    size_t     length;
+    double     min, max;
+    SDL_Rect   area;
+    uint64_t   asamples;        // used to compute actual frequency
+    uint64_t   atime;           // see above
+    float      afreq;           // actual frequency
 } schannel_t;
 
 struct scope_t {
-    schannel_t* channel;
-    unsigned int nchannels;
-    unsigned int freq; // samples/s
-    SDL_Rect area;
-    SDL_Texture* backdrop;
+    schannel_t*   channel;
+    unsigned int  nchannels;
+    unsigned int  freq;         // samples/s
+    SDL_Rect      area;
+    SDL_Texture*  backdrop;
     SDL_Renderer* render;
-    FC_Font* font;
-    uint64_t time;
-    double elapsed, ticksPerSec;
+    FC_Font*      font;
+    uint64_t      time;
+    double        elapsed, ticksPerSec;
 };
 
 scope_t*
@@ -85,7 +88,7 @@ scope_initChannel( scope_t* scope, unsigned int chan, int mode ) {
     schannel_t* c =&scope->channel[chan];
     c->hshift =.0f;
     c->offset =0;
-    c->length =10000;
+    c->length =1000;
     c->max    =1.0;
     c->min    =-1.0;
     c->mode   =mode;
@@ -179,23 +182,19 @@ scope_drawChannel( scope_t* scope, unsigned int chan ) {
     SDL_Point points[c->length];        // buffer the calls to SDL_RenderDrawPoint/Line
     size_t p =0;                        // n-th point
 
-    // Print the current max/min
+    // Print the current max/min and freq
     FC_DrawAlign( scope->font, scope->render, 
                   r.x + r.w-1, r.y+1, FC_ALIGN_RIGHT, 
                   "Ymax=%.1f", c->max );
     FC_DrawAlign( scope->font, scope->render, 
                   r.x + r.w-1, r.y + r.h - 1 - FC_GetLineHeight( scope->font ), FC_ALIGN_RIGHT, 
                   "Ymin=%.1f", c->min );
+    FC_Draw( scope->font, scope->render, r.x+1, r.y+1, "%.1f/s", c->afreq ); 
 
-    double damp =fmin( 1.0, 100. / fmin( c->length, cfifo_length( c->sampleBuffer ) ) ); // Dampening factor for auto-scaling
+    double damp =fmin( 1.0, 1000. / fmin( c->length, cfifo_length( c->sampleBuffer ) ) ); // Dampening factor for auto-scaling
     
-    double min =-0.1, max =0.1;
+    double min =1000000, max =-1000000;
     for( size_t i =0; i < c->length; i++ ) {
-        // Wrap the offset around if necessary
-        //size_t idx = (c->offset + i) % sampler_length( c->sampler );
-
-        // Sample value from the sample buffer
-        //double val =sampler_getDataPtr( c->sampler )[idx];
 
         double val =cfifo_read( c->sampleBuffer, i );
 
@@ -213,11 +212,11 @@ scope_drawChannel( scope_t* scope, unsigned int chan ) {
         // Adjust min and max, but try to avoid one single spike throwing the image off
         
         if( val != 0 && val > max ) {
-            double f = fmin(1.0, (fabs(max) / fabs(val))) * damp;
+            double f = fmin(1.0, (fabs(c->max) / fabs(val))) * damp;
             max =max * (1.-f) + val * f;
         }
         if( val != 0 && val < min ) {
-            double f = fmin(1.0, (fabs(min) / fabs(val))) * damp;
+            double f = fmin(1.0, (fabs(c->min) / fabs(val))) * damp;
             min =min * (1.-f) + val * f;
         }
     }
@@ -267,7 +266,6 @@ scope_updateDrawingArea( scope_t* scope, SDL_Rect area ) {
           //      SDL_RenderDrawLine( render, r.x, yMid, r.x+r.w, yMid );
     
             // Render the static text
-            FC_Draw( scope->font, scope->render, x+1, y+1, "%d/s", (int)scope->freq ); 
             FC_DrawAlign( scope->font, scope->render, x + area.w/2, y+1, FC_ALIGN_CENTER, "Channel %d", i+1 );
 
             y += height + pad;
@@ -284,31 +282,41 @@ scope_updateChannel( scope_t* scope, unsigned int chan ) {
     schannel_t* c =&scope->channel[chan];
     if( c->mode == SCOPE_CHANNEL_NONE ) return;
 
+    if( c->atime == 0 ) c->atime = scope->time;
+
     // Compute the amount of samples that the view has shifted since the last draw
     c->hshift += (float)scope->freq * scope->elapsed;
     // Whole number of new samples 
-    int delta = (int)c->hshift;
+    int delta  = (int)c->hshift;
     // Decimal part
     c->hshift -= delta;
-    // Shift the offset into the sample array accordingly (wrap around if necessary)
-    //c->offset = (c->offset + delta) % sampler_length( c->sampler );
 
-    // Less than one new samples to consume, return
-    if( delta == 0 ) return;
-        
-    for( int i=0; i < delta; i++ ) {
+       
+    int i;
+    for( i = 0; i < delta; i++ ) {
         double s =0.;
         // Consume the sample from the appropriate buffer/fifo
         if( c->mode == SCOPE_CHANNEL_STATIC ) {
             s = sampler_getNext( c->sampler );
         } else if( c->mode == SCOPE_CHANNEL_STREAM ) {
-            s = cfifo_take( c->sampleQueue );
+            // The queue may be empty. In that case we abort and notify the user about the synchronization loss
+            if( cfifo_length( c->sampleQueue ) == 0 ) {
+                break;         
+            } else
+                s = cfifo_take( c->sampleQueue );
         }
 
         // samplerBuffer will be used to draw the plot
         cfifo_push( c->sampleBuffer, s );
         if( cfifo_length( c->sampleBuffer ) > c->length )
             cfifo_take( c->sampleBuffer );
+    }
+
+    c->asamples += i;
+    if( c->asamples > scope->freq ) {
+        c->afreq    = (float)c->asamples / ((float)(scope->time - c->atime) / scope->ticksPerSec);
+        c->asamples = 0;
+        c->atime    = scope->time;
     }
 }
 
@@ -321,7 +329,7 @@ scope_computeElapsedTime( scope_t* scope ) {
         scope->elapsed =(double)(now - scope->time) / scope->ticksPerSec;
     }
 
-    scope->time =SDL_GetPerformanceCounter();
+    scope->time =now;
 }
 
 void

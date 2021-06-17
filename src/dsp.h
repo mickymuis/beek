@@ -1,6 +1,9 @@
 #ifndef DSP_H
 #define DSP_H
 
+#include "adt.h"
+#include "sampler.h"
+
 typedef void(*dsp_consume_func_t)(void*);
 typedef void(*dsp_destroy_func_t)(void*);
 
@@ -11,7 +14,6 @@ typedef struct {
     double out[4];
     dsp_consume_func_t consume;
     dsp_destroy_func_t destroy;
-
 } dsp_worker_t;
 
 typedef struct {
@@ -19,6 +21,7 @@ typedef struct {
     int workers_size;
     int nworkers; 
     int frequency;
+    sampler_t* sampler;
 } dsp_t;
 
 dsp_t*
@@ -35,5 +38,8 @@ dsp_addWorker( dsp_t* dsp, dsp_worker_t* worker );
 
 void
 dsp_removeWorker( dsp_t* dsp, dsp_worker_t* worker );
+
+void
+dsp_tick( dsp_t* dsp );
 
 #endif
