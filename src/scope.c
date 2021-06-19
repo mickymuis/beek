@@ -9,18 +9,19 @@
 #define SDL_RECT_EQ(a,b) (a.x==b.x && a.y==b.y && a.w==b.w && a.h==b.h)
 
 typedef struct {
-    int        mode, style;
+    int        mode, style, vrange;
     sampler_t* sampler;
     cfifo_t*   sampleQueue;
     cfifo_t*   sampleBuffer;
     float      hshift;
-    size_t     offset;
+    //size_t     offset;
     size_t     length;
-    double     min, max;
-    SDL_Rect   area;
+    double     min, max, avg;
+    SDL_Rect   area;            // actual drawing area
     uint64_t   asamples;        // used to compute actual frequency
     uint64_t   atime;           // see above
     float      afreq;           // actual frequency
+    int        masterChannel;   // channel to lock vrange to
 } schannel_t;
 
 struct scope_t {
@@ -45,7 +46,7 @@ scope_create( unsigned int nchannels, SDL_Renderer* render ) {
     assert( s->channel );
     memset( s->channel, 0, nchannels * sizeof(schannel_t) );
     for( int i =0; i < nchannels; i++ )
-        scope_initChannel( s, i, SCOPE_CHANNEL_NONE );
+        scope_initChannel( s, i, SCOPE_MODE_NONE );
 
     s->ticksPerSec = (double)SDL_GetPerformanceFrequency();
     s->render      = render;
@@ -87,20 +88,20 @@ scope_initChannel( scope_t* scope, unsigned int chan, int mode ) {
     if( chan >= scope->nchannels ) return;
     schannel_t* c =&scope->channel[chan];
     c->hshift =.0f;
-    c->offset =0;
     c->length =1000;
     c->max    =1.0;
     c->min    =-1.0;
+    c->avg    =0.;
     c->mode   =mode;
 
     if( c->sampleQueue  != NULL ) cfifo_destroy( c->sampleQueue );
     if( c->sampleBuffer != NULL ) cfifo_destroy( c->sampleBuffer );
 
     switch( mode ) {
-        case SCOPE_CHANNEL_STATIC:
+        case SCOPE_MODE_STATIC:
             c->sampleBuffer =cfifo_create( SCOPE_MAX_LENGTH );
             break;
-        case SCOPE_CHANNEL_STREAM:
+        case SCOPE_MODE_STREAM:
             c->sampleBuffer =cfifo_create( SCOPE_MAX_LENGTH );
             c->sampleQueue  =cfifo_create( SCOPE_FIFO_DEPTH );
             break;
@@ -114,7 +115,7 @@ scope_setChannelBuffer( scope_t* scope, unsigned int chan, sampler_t* sampler ) 
     assert( scope );
     if( chan >= scope->nchannels ) return;
     schannel_t* c =&scope->channel[chan];
-    if( c->mode != SCOPE_CHANNEL_STATIC ) return;
+    if( c->mode != SCOPE_MODE_STATIC ) return;
 
     c->sampler =sampler;
 }
@@ -124,7 +125,7 @@ scope_pushChannelFifo( scope_t* scope, unsigned int chan, double sample ) {
     assert( scope );
     if( chan >= scope->nchannels ) return;
     schannel_t* c =&scope->channel[chan];
-    if( c->mode != SCOPE_CHANNEL_STREAM ) return;
+    if( c->mode != SCOPE_MODE_STREAM ) return;
 
     cfifo_push( c->sampleQueue, sample );
 }
@@ -136,6 +137,43 @@ scope_setChannelDrawStyle( scope_t* scope, unsigned int chan, int style ) {
     schannel_t* c =&scope->channel[chan];
 
     c->style =style;
+}
+
+void
+scope_setChannelLength( scope_t* scope, unsigned int chan, unsigned int length ) {
+    assert( scope );
+    if( chan >= scope->nchannels ) return;
+    schannel_t* c =&scope->channel[chan];
+
+    c->length =length;
+}
+
+void
+scope_setChannelVerticalRange( scope_t* scope, unsigned int chan, double min, double max ) {
+    assert( scope );
+    if( chan >= scope->nchannels ) return;
+    schannel_t* c =&scope->channel[chan];
+
+    c->min =min; c->max =max;
+}
+
+void 
+scope_setChannelVerticalMode( scope_t* scope, unsigned int chan, int mode ) {
+    assert( scope );
+    if( chan >= scope->nchannels ) return;
+    schannel_t* c =&scope->channel[chan];
+
+    c->vrange =mode;
+}
+
+void
+scope_lockChannelRange( scope_t* scope, unsigned int chan, unsigned int toChan ) {
+    assert( scope );
+    if( chan >= scope->nchannels || toChan >= scope->nchannels ) return;
+    schannel_t* c =&scope->channel[chan];
+
+    c->vrange =SCOPE_VRANGE_LOCKED;
+    c->masterChannel =toChan;
 }
 
 void
@@ -172,8 +210,22 @@ scope_drawGrid( SDL_Renderer* render, SDL_Rect r, int vdiv ) {
 void
 scope_drawChannel( scope_t* scope, unsigned int chan ) {
     schannel_t* c =&scope->channel[chan];
-    if( c->mode == SCOPE_CHANNEL_NONE ) return;
+    if( c->mode == SCOPE_MODE_NONE ) return;
     SDL_Rect r    =c->area;
+    
+    double damp =fmin( 1.0, 1000. / fmin( c->length, cfifo_length( c->sampleBuffer ) ) ); // Dampening factor for auto-scaling
+    double spread =1. / fmin( c->length+1, cfifo_length( c->sampleBuffer )+1 ); 
+
+    double min =0., max =0.;
+    if( c->vrange == SCOPE_VRANGE_LOCKED ) {
+        // Obtain min, max and length from the master channel
+        schannel_t* c2 =&scope->channel[c->masterChannel];
+        c->min =c2->min; c->max =c2->max;
+        // c->length =c2->length;
+         
+    } else {
+        min =c->avg; max =c->avg;
+    }
 
     float xStep =(float)r.w / (float)c->length;
     float yStep =(float)r.h / (c->max - c->min);
@@ -191,15 +243,15 @@ scope_drawChannel( scope_t* scope, unsigned int chan ) {
                   "Ymin=%.1f", c->min );
     FC_Draw( scope->font, scope->render, r.x+1, r.y+1, "%.1f/s", c->afreq ); 
 
-    double damp =fmin( 1.0, 1000. / fmin( c->length, cfifo_length( c->sampleBuffer ) ) ); // Dampening factor for auto-scaling
-    
-    double min =1000000, max =-1000000;
+    /*int lead =c->length - cfifo_length( c->sampleBuffer );
+    lead = lead < 0 ? 0 : lead;*/
+
     for( size_t i =0; i < c->length; i++ ) {
 
         double val =cfifo_read( c->sampleBuffer, i );
 
         // Coordinates within the given clip rectangle
-        float x =((float)i - c->hshift)*xStep + (float)r.x;
+        float x =((float)(i) - c->hshift)*xStep + (float)r.x;
         float y =yMid - fmax( c->min, fmin( c->max, val ) ) * yStep;
 
         // Draw...
@@ -210,25 +262,36 @@ scope_drawChannel( scope_t* scope, unsigned int chan ) {
         }
 
         // Adjust min and max, but try to avoid one single spike throwing the image off
+        c->avg =c->avg * (1.-spread) + val * spread;
         
-        if( val != 0 && val > max ) {
-            double f = fmin(1.0, (fabs(c->max) / fabs(val))) * damp;
-            max =max * (1.-f) + val * f;
+        if( c->vrange == SCOPE_VRANGE_AUTO_FIT ) {
+            max =fmax( max, val );
+            min =fmin( min, val );
         }
-        if( val != 0 && val < min ) {
-            double f = fmin(1.0, (fabs(c->min) / fabs(val))) * damp;
-            min =min * (1.-f) + val * f;
+        else if( c->vrange == SCOPE_VRANGE_AUTO_OPTIMAL ) {
+            if( val != 0 && val > max ) {
+                double f = fmin(1.0, (fabs(c->avg) / fabs(val)));// * damp;
+                f *=f*f;
+                max =max * (1.-f) + val * f;
+            }
+            else if( val != 0 && val < min ) {
+                double f = fmin(1.0, (fabs(c->avg) / fabs(val)));// * damp;
+                f *=f*f;
+                min =min * (1.-f) + val * f;
+            }
         }
     }
 
-    if( c->style == SCOPE_CHANNEL_LINES )
+    if( c->style == SCOPE_DRAW_LINES )
         SDL_RenderDrawLines( scope->render, points, p );
     SDL_RenderDrawPoints( scope->render, points, p );
 
-    // Auto-zoom with damping/interpolation, factor in freq
-    damp *=scope->freq * 0.001;
-    c->max =c->max * (1.-damp) + max * damp;
-    c->min =c->min * (1.-damp) + min * damp;
+    if( c->vrange == SCOPE_VRANGE_AUTO_FIT || c->vrange == SCOPE_VRANGE_AUTO_OPTIMAL ) {
+        // Auto-zoom with damping/interpolation, factor in freq
+        double damp =scope->freq * 0.0005;
+        c->max =c->max * (1.-damp) + max * damp;
+        c->min =c->min * (1.-damp) + min * damp;
+    }
 }
 
 
@@ -253,7 +316,7 @@ scope_updateDrawingArea( scope_t* scope, SDL_Rect area ) {
         int width = area.w - 2*pad;
         int x =pad + area.x, y =pad + area.y;
         for( int i =0; i < scope->nchannels; i++ ) {
-            //if( scope->channel[i].mode == SCOPE_CHANNEL_NONE ) continue; 
+            //if( scope->channel[i].mode == SCOPE_MODE_NONE ) continue; 
             // Absolute position/size within the render area
             SDL_Rect r = {x, y, width, height};
             scope->channel[i].area =r;
@@ -280,7 +343,7 @@ scope_updateDrawingArea( scope_t* scope, SDL_Rect area ) {
 void
 scope_updateChannel( scope_t* scope, unsigned int chan ) {
     schannel_t* c =&scope->channel[chan];
-    if( c->mode == SCOPE_CHANNEL_NONE ) return;
+    if( c->mode == SCOPE_MODE_NONE ) return;
 
     if( c->atime == 0 ) c->atime = scope->time;
 
@@ -296,9 +359,9 @@ scope_updateChannel( scope_t* scope, unsigned int chan ) {
     for( i = 0; i < delta; i++ ) {
         double s =0.;
         // Consume the sample from the appropriate buffer/fifo
-        if( c->mode == SCOPE_CHANNEL_STATIC ) {
+        if( c->mode == SCOPE_MODE_STATIC ) {
             s = sampler_getNext( c->sampler );
-        } else if( c->mode == SCOPE_CHANNEL_STREAM ) {
+        } else if( c->mode == SCOPE_MODE_STREAM ) {
             // The queue may be empty. In that case we abort and notify the user about the synchronization loss
             if( cfifo_length( c->sampleQueue ) == 0 ) {
                 break;         

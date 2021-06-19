@@ -87,13 +87,15 @@ main( int argc, char**argv ) {
     }
 
     scope_t* scope = scope_create( 2, win.render );
-    scope_setFrequency( scope, 500 );
-    //scope_initChannel( scope, 0, SCOPE_CHANNEL_STATIC );
+    scope_setFrequency( scope, 100 );
+    //scope_initChannel( scope, 0, SCOPE_MODE_STATIC );
     //scope_setChannelBuffer( scope, 0, s );
-    scope_initChannel( scope, 0, SCOPE_CHANNEL_STREAM );
-    scope_setChannelDrawStyle( scope, 0, SCOPE_CHANNEL_LINES );
-    scope_initChannel( scope, 1, SCOPE_CHANNEL_STREAM );
-    scope_setChannelDrawStyle( scope, 1, SCOPE_CHANNEL_LINES );
+    scope_initChannel( scope, 0, SCOPE_MODE_STREAM );
+    scope_setChannelDrawStyle( scope, 0, SCOPE_DRAW_LINES );
+    scope_setChannelVerticalMode( scope, 0, SCOPE_VRANGE_AUTO_OPTIMAL );
+    scope_initChannel( scope, 1, SCOPE_MODE_STREAM );
+    scope_setChannelDrawStyle( scope, 1, SCOPE_DRAW_LINES );
+    scope_lockChannelRange( scope, 1, 0 );
 
     win.on_redraw = (window_renderfunc_t)&update;
     win.user =scope;
