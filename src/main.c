@@ -2,11 +2,13 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <errno.h>
+#include <threads.h>
 
 #include "window.h"
 #include "scope.h"
 #include "sampler.h"
-#include "adt.h"
+#include "cfifo.h"
+#include "atomq.h"
 #include "dsp.h"
 #include "dsp/passthrough.h"
 #include "dsp/lowpass.h"
@@ -52,8 +54,6 @@ update( window_t* win, SDL_Rect area ) {
 
 int
 main( int argc, char**argv ) {
-
-
     if( argc < 2 ) return 0;
     sampler_t *s;
     FILE* f =fopen( argv[1], "r" );

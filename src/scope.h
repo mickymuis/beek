@@ -4,7 +4,7 @@
 #include <SDL2/SDL.h>
 
 #include "sampler.h"
-#include "adt.h"
+#include "cfifo.h"
 
 static const size_t SCOPE_MAX_LENGTH   = 65535;
 static const size_t SCOPE_FIFO_DEPTH   = 1024;

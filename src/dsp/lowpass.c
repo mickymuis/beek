@@ -17,7 +17,7 @@ static void
 consume( dsp_worker_t* worker ) {
     dsp_lowpass_t* lp =(dsp_lowpass_t*)worker;
 
-    lp->avg =lp->avg * 0.99 + worker->in[0] * 0.01;
+    lp->avg =lp->avg * 0.95 + worker->in[0] * 0.05;
     worker->out[0] =lp->avg;
 }
 

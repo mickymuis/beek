@@ -1,7 +1,7 @@
 #ifndef DSP_H
 #define DSP_H
 
-#include "adt.h"
+#include "cfifo.h"
 #include "sampler.h"
 
 typedef void(*dsp_consume_func_t)(void*);

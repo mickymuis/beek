@@ -127,7 +127,7 @@ scope_pushChannelFifo( scope_t* scope, unsigned int chan, double sample ) {
     schannel_t* c =&scope->channel[chan];
     if( c->mode != SCOPE_MODE_STREAM ) return;
 
-    cfifo_push( c->sampleQueue, sample );
+    cfifo_push2( c->sampleQueue, sample );
 }
 
 void

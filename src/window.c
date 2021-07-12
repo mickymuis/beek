@@ -29,7 +29,7 @@ window_create( window_t* win ) {
     
     // We use SDL2 to create a resizable window
     win->handle = SDL_CreateWindow(
-            "Foo",
+            "Beek",
             SDL_WINDOWPOS_CENTERED,
             SDL_WINDOWPOS_CENTERED,
             800,
