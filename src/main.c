@@ -16,7 +16,7 @@
 dsp_t* DSP;
 
 void fakeThread( scope_t* scope ) {
-    static int freq      =500;
+    static int freq      =100;
     static uint64_t time =0UL;
     uint64_t now         =SDL_GetPerformanceCounter();
     double elapsed;
@@ -28,12 +28,19 @@ void fakeThread( scope_t* scope ) {
 
     time =SDL_GetPerformanceCounter();
 
-    int delta =ceilf(freq * elapsed);
+    int delta =floorf(freq * elapsed);
 
     for( int i=0; i < delta; i++ ) {
         dsp_tick( DSP );
         scope_pushChannelFifo( scope, 0, DSP->workers[0]->out[0] );
         scope_pushChannelFifo( scope, 1, DSP->workers[1]->out[0] );
+        scope_pushChannelFifo( scope, 1, DSP->workers[1]->out[0] -10. );
+        scope_pushChannelFifo( scope, 1, DSP->workers[1]->out[0] -20. );
+        scope_pushChannelFifo( scope, 1, DSP->workers[1]->out[0] -30. );
+        scope_pushChannelFifo( scope, 1, DSP->workers[1]->out[0] -40. );
+        scope_pushChannelFifo( scope, 1, DSP->workers[1]->out[0] -50. );
+        scope_pushChannelFifo( scope, 1, DSP->workers[1]->out[0] -60. );
+        scope_pushChannelFifo( scope, 1, DSP->workers[1]->out[0] -70. );
     }
 }
 
@@ -93,9 +100,11 @@ main( int argc, char**argv ) {
     scope_initChannel( scope, 0, SCOPE_MODE_STREAM );
     scope_setChannelDrawStyle( scope, 0, SCOPE_DRAW_LINES );
     scope_setChannelVerticalMode( scope, 0, SCOPE_VRANGE_AUTO_OPTIMAL );
+    //scope_setChannelMultiSample( scope, 0, 2 );
     scope_initChannel( scope, 1, SCOPE_MODE_STREAM );
     scope_setChannelDrawStyle( scope, 1, SCOPE_DRAW_LINES );
     scope_lockChannelRange( scope, 1, 0 );
+    scope_setChannelMultiSample( scope, 1, 8 );
 
     win.on_redraw = (window_renderfunc_t)&update;
     win.user =scope;

@@ -47,6 +47,10 @@ scope_setFrequency( scope_t* scope, unsigned int freq );
 void
 scope_initChannel( scope_t* scope, unsigned int chan, int mode );
 
+/** Tells the channel @chan how many consecutive elements in the buffer make up one sample (default is 1). */
+void
+scope_setChannelMultiSample( scope_t* scope, unsigned int chan, unsigned int sampleSize );
+
 /** Sets the static buffer of channel @chan to be @sampler. @sampler position will be modified as scope may call sampler_getNext() on it.
     On scope channels that do not have mode equal to SCOPE_CHANNEL_STATIC this function will have no effect. */
 void

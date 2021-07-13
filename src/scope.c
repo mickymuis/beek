@@ -9,19 +9,19 @@
 #define SDL_RECT_EQ(a,b) (a.x==b.x && a.y==b.y && a.w==b.w && a.h==b.h)
 
 typedef struct {
-    int        mode, style, vrange;
-    sampler_t* sampler;
-    cfifo_t*   sampleQueue;
-    cfifo_t*   sampleBuffer;
-    float      hshift;
-    //size_t     offset;
-    size_t     length;
-    double     min, max, avg;
-    SDL_Rect   area;            // actual drawing area
-    uint64_t   asamples;        // used to compute actual frequency
-    uint64_t   atime;           // see above
-    float      afreq;           // actual frequency
-    int        masterChannel;   // channel to lock vrange to
+    int           mode, style, vrange;
+    sampler_t*    sampler;
+    cfifo_t*      sampleQueue;
+    cfifo_t*      sampleBuffer;
+    float         hshift;
+    size_t        length;
+    double        min, max, avg;
+    SDL_Rect      area;            // actual drawing area
+    uint64_t      asamples;        // used to compute actual frequency
+    uint64_t      atime;           // see above
+    float         afreq;           // actual frequency
+    int           masterChannel;   // channel to lock vrange to
+    unsigned int  samplesize;
 } schannel_t;
 
 struct scope_t {
@@ -35,6 +35,45 @@ struct scope_t {
     uint64_t      time;
     double        elapsed, ticksPerSec;
 };
+
+#define N_COLORS 9
+static uint8_t Palette[N_COLORS][3] = {
+    { 15,  96,  63  },  // dull green
+    { 15,  255, 63  },  // green
+    { 255, 127,  15  }, // amber
+    { 196, 63,  255 },  // violet
+    { 255, 235, 45 },   // yellow
+    { 63,  63,  255 },  // blue
+    { 255, 15,  96  },  // fushia
+    { 15,  255, 215 },  // cyan
+    { 255, 255, 215 }   // off-white
+};
+
+static void
+setSDLPaletteColor( scope_t* scope, int index ) {
+//for now
+/*    switch( index ) {
+        case 0:
+            SDL_SetRenderDrawColor( scope->render, 15, 255, 63, SDL_ALPHA_OPAQUE );
+        break;
+        case 1:
+            SDL_SetRenderDrawColor( scope->render, 255, 15, 63, SDL_ALPHA_OPAQUE );
+        break;
+        case 2:
+            SDL_SetRenderDrawColor( scope->render, 63, 15, 255, SDL_ALPHA_OPAQUE );
+        break;
+    }*/
+    SDL_SetRenderDrawBlendMode( scope->render, SDL_BLENDMODE_ADD );
+    SDL_SetRenderDrawColor( scope->render, 
+            Palette[index % N_COLORS][0], 
+            Palette[index % N_COLORS][1], 
+            Palette[index % N_COLORS][2], SDL_ALPHA_OPAQUE );
+    /*SDL_SetRenderDrawColor( scope->render, 
+            (127 + (127 * index)) % 256, 
+            (255 + (85 * index)) % 256, 
+            (128 + (64 * index)) % 256, 
+            SDL_ALPHA_OPAQUE );*/
+}
 
 scope_t*
 scope_create( unsigned int nchannels, SDL_Renderer* render ) {
@@ -87,12 +126,13 @@ scope_initChannel( scope_t* scope, unsigned int chan, int mode ) {
     assert( scope );
     if( chan >= scope->nchannels ) return;
     schannel_t* c =&scope->channel[chan];
-    c->hshift =.0f;
-    c->length =1000;
-    c->max    =1.0;
-    c->min    =-1.0;
-    c->avg    =0.;
-    c->mode   =mode;
+    c->hshift      =.0f;
+    c->length      =1000;
+    c->max         =1.0;
+    c->min         =-1.0;
+    c->avg         =0.;
+    c->mode        =mode;
+    c->samplesize =1;
 
     if( c->sampleQueue  != NULL ) cfifo_destroy( c->sampleQueue );
     if( c->sampleBuffer != NULL ) cfifo_destroy( c->sampleBuffer );
@@ -108,6 +148,17 @@ scope_initChannel( scope_t* scope, unsigned int chan, int mode ) {
         default:
             break;
     }
+}
+
+void
+scope_setChannelMultiSample( scope_t* scope, unsigned int chan, unsigned int sampleSize ) {
+    assert( scope );
+    if( chan >= scope->nchannels ) return;
+    if( sampleSize < 1 ) return;
+    
+    schannel_t* c =&scope->channel[chan];
+    c->samplesize =sampleSize;
+
 }
 
 void
@@ -213,7 +264,7 @@ scope_drawChannel( scope_t* scope, unsigned int chan ) {
     if( c->mode == SCOPE_MODE_NONE ) return;
     SDL_Rect r    =c->area;
     
-    double damp =fmin( 1.0, 1000. / fmin( c->length, cfifo_length( c->sampleBuffer ) ) ); // Dampening factor for auto-scaling
+//    double damp =fmin( 1.0, 1000. / fmin( c->length, cfifo_length( c->sampleBuffer ) ) ); // Dampening factor for auto-scaling
     double spread =1. / fmin( c->length+1, cfifo_length( c->sampleBuffer )+1 ); 
 
     double min =0., max =0.;
@@ -231,8 +282,9 @@ scope_drawChannel( scope_t* scope, unsigned int chan ) {
     float yStep =(float)r.h / (c->max - c->min);
     float yMid =(float)r.y + yStep * c->max;
 
-    SDL_Point points[c->length];        // buffer the calls to SDL_RenderDrawPoint/Line
-    size_t p =0;                        // n-th point
+    SDL_Point points[c->samplesize][c->length]; // buffer the calls to SDL_RenderDrawPoint/Line
+    size_t p[c->samplesize];                        // n-th point
+    memset( p, 0, sizeof(size_t) * c->samplesize );
 
     // Print the current max/min and freq
     FC_DrawAlign( scope->font, scope->render, 
@@ -248,43 +300,54 @@ scope_drawChannel( scope_t* scope, unsigned int chan ) {
 
     for( size_t i =0; i < c->length; i++ ) {
 
-        double val =cfifo_read( c->sampleBuffer, i );
-
-        // Coordinates within the given clip rectangle
+        // Horizontal position within the given clip rectangle
         float x =((float)(i) - c->hshift)*xStep + (float)r.x;
-        float y =yMid - fmax( c->min, fmin( c->max, val ) ) * yStep;
 
-        // Draw...
-        if( (int)x >= r.x) {
-            //SDL_RenderDrawPoint( render, x, y );
-            SDL_Point pnt = {x,y};
-            points[p++] = pnt;
-        }
+        // If multisampling is enabled, we need to read multiple doubles for each index i
+        // the 'samplesize' property of the channel dictates how many values make up one sample
+        for( int ms =0; ms < c->samplesize; ms++ ) {
+            
+            double val =cfifo_read( c->sampleBuffer, c->samplesize * i + ms );
 
-        // Adjust min and max, but try to avoid one single spike throwing the image off
-        c->avg =c->avg * (1.-spread) + val * spread;
-        
-        if( c->vrange == SCOPE_VRANGE_AUTO_FIT ) {
-            max =fmax( max, val );
-            min =fmin( min, val );
-        }
-        else if( c->vrange == SCOPE_VRANGE_AUTO_OPTIMAL ) {
-            if( val != 0 && val > max ) {
-                double f = fmin(1.0, (fabs(c->avg) / fabs(val)));// * damp;
-                f *=f*f;
-                max =max * (1.-f) + val * f;
+            // Translate val to an y-value in the graph
+            float y =yMid - fmax( c->min, fmin( c->max, val ) ) * yStep;
+
+            // Draw...
+            if( (int)x >= r.x) {
+                //SDL_RenderDrawPoint( render, x, y );
+                SDL_Point pnt = {x,y};
+                points[ms][p[ms]++] = pnt;
             }
-            else if( val != 0 && val < min ) {
-                double f = fmin(1.0, (fabs(c->avg) / fabs(val)));// * damp;
-                f *=f*f;
-                min =min * (1.-f) + val * f;
+
+            // Adjust min and max, but try to avoid one single spike throwing the image off
+            c->avg =c->avg * (1.-spread) + val * spread;
+            
+            if( c->vrange == SCOPE_VRANGE_AUTO_FIT ) {
+                max =fmax( max, val );
+                min =fmin( min, val );
+            }
+            else if( c->vrange == SCOPE_VRANGE_AUTO_OPTIMAL ) {
+                if( val != 0 && val > max ) {
+                    double f = fmin(1.0, (fabs(c->avg) / fabs(val)));// * damp;
+                    f *=f*f;
+                    max =max * (1.-f) + val * f;
+                }
+                else if( val != 0 && val < min ) {
+                    double f = fmin(1.0, (fabs(c->avg) / fabs(val)));// * damp;
+                    f *=f*f;
+                    min =min * (1.-f) + val * f;
+                }
             }
         }
     }
 
-    if( c->style == SCOPE_DRAW_LINES )
-        SDL_RenderDrawLines( scope->render, points, p );
-    SDL_RenderDrawPoints( scope->render, points, p );
+    for( int i =0; i < c->samplesize; i++ ) {
+        setSDLPaletteColor( scope, i+1 );
+        if( c->style == SCOPE_DRAW_LINES )
+            SDL_RenderDrawLines( scope->render, points[i], p[i] );
+        else
+            SDL_RenderDrawPoints( scope->render, points[i], p[i] );
+    }
 
     if( c->vrange == SCOPE_VRANGE_AUTO_FIT || c->vrange == SCOPE_VRANGE_AUTO_OPTIMAL ) {
         // Auto-zoom with damping/interpolation, factor in freq
@@ -322,7 +385,7 @@ scope_updateDrawingArea( scope_t* scope, SDL_Rect area ) {
             scope->channel[i].area =r;
 
             // Render the frame and the grid for this channel to the texture
-            SDL_SetRenderDrawColor( scope->render, 15, 96, 63, SDL_ALPHA_OPAQUE );
+            setSDLPaletteColor( scope, 0 );
             scope_drawGrid( scope->render, r, 8 );
             SDL_RenderDrawRect( scope->render, (SDL_Rect*)&r );
         //    if( (int)yMid < r.y+r.h-10 && (int)yMid > r.y+10 )
@@ -359,20 +422,23 @@ scope_updateChannel( scope_t* scope, unsigned int chan ) {
     for( i = 0; i < delta; i++ ) {
         double s =0.;
         // Consume the sample from the appropriate buffer/fifo
-        if( c->mode == SCOPE_MODE_STATIC ) {
-            s = sampler_getNext( c->sampler );
-        } else if( c->mode == SCOPE_MODE_STREAM ) {
+        if( c->mode == SCOPE_MODE_STREAM ) {
             // The queue may be empty. In that case we abort and notify the user about the synchronization loss
-            if( cfifo_length( c->sampleQueue ) == 0 ) {
+            if( cfifo_length( c->sampleQueue ) < c->samplesize )
                 break;         
-            } else
-                s = cfifo_take( c->sampleQueue );
         }
+        for( int j =0; j < c->samplesize; j++ ) {
+            if( c->mode == SCOPE_MODE_STATIC ) {
+                s = sampler_getNext( c->sampler );
+            } else if( c->mode == SCOPE_MODE_STREAM ) {
+                s = cfifo_take( c->sampleQueue );
+            }
 
-        // samplerBuffer will be used to draw the plot
-        cfifo_push( c->sampleBuffer, s );
-        if( cfifo_length( c->sampleBuffer ) > c->length )
-            cfifo_take( c->sampleBuffer );
+            // samplerBuffer will be used to draw the plot
+            cfifo_push( c->sampleBuffer, s );
+            if( cfifo_length( c->sampleBuffer ) > c->length * c->samplesize )
+                cfifo_take( c->sampleBuffer );
+        }
     }
 
     c->asamples += i;
@@ -409,7 +475,6 @@ scope_update( scope_t* scope ) {
         SDL_RenderCopy( scope->render, scope->backdrop, NULL, &scope->area );
 
     // Draw the channels
-    SDL_SetRenderDrawColor( scope->render, 15, 255, 63, SDL_ALPHA_OPAQUE );
     for( int i =0; i < scope->nchannels; i++ )
         scope_drawChannel( scope, i );
 
