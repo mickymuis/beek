@@ -51,18 +51,6 @@ static uint8_t Palette[N_COLORS][3] = {
 
 static void
 setSDLPaletteColor( scope_t* scope, int index ) {
-//for now
-/*    switch( index ) {
-        case 0:
-            SDL_SetRenderDrawColor( scope->render, 15, 255, 63, SDL_ALPHA_OPAQUE );
-        break;
-        case 1:
-            SDL_SetRenderDrawColor( scope->render, 255, 15, 63, SDL_ALPHA_OPAQUE );
-        break;
-        case 2:
-            SDL_SetRenderDrawColor( scope->render, 63, 15, 255, SDL_ALPHA_OPAQUE );
-        break;
-    }*/
     SDL_SetRenderDrawBlendMode( scope->render, SDL_BLENDMODE_ADD );
     SDL_SetRenderDrawColor( scope->render, 
             Palette[index % N_COLORS][0], 
