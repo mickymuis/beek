@@ -1,4 +1,5 @@
 #include "scope.h"
+#include "atomq.h"
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
@@ -11,7 +12,7 @@
 typedef struct {
     int           mode, style, vrange;
     sampler_t*    sampler;
-    cfifo_t*      sampleQueue;
+    atomq_t*      sampleQueue;
     cfifo_t*      sampleBuffer;
     float         hshift;
     size_t        length;
@@ -92,7 +93,7 @@ scope_destroy( scope_t* s ) {
     if( s->channel  != NULL ) {
         for( int i =0; i < s->nchannels; i++ ) {
             if( s->channel[i].sampleQueue != NULL )
-                cfifo_destroy( s->channel[i].sampleQueue );
+                atomq_destroy( s->channel[i].sampleQueue );
             if( s->channel[i].sampleBuffer != NULL )
                 cfifo_destroy( s->channel[i].sampleBuffer );
         }
@@ -122,7 +123,7 @@ scope_initChannel( scope_t* scope, unsigned int chan, int mode ) {
     c->mode        =mode;
     c->samplesize =1;
 
-    if( c->sampleQueue  != NULL ) cfifo_destroy( c->sampleQueue );
+    if( c->sampleQueue  != NULL ) atomq_destroy( c->sampleQueue );
     if( c->sampleBuffer != NULL ) cfifo_destroy( c->sampleBuffer );
 
     switch( mode ) {
@@ -131,7 +132,7 @@ scope_initChannel( scope_t* scope, unsigned int chan, int mode ) {
             break;
         case SCOPE_MODE_STREAM:
             c->sampleBuffer =cfifo_create( SCOPE_MAX_LENGTH );
-            c->sampleQueue  =cfifo_create( SCOPE_FIFO_DEPTH );
+            c->sampleQueue  =atomq_create( SCOPE_FIFO_DEPTH );
             break;
         default:
             break;
@@ -166,7 +167,7 @@ scope_pushChannelFifo( scope_t* scope, unsigned int chan, double sample ) {
     schannel_t* c =&scope->channel[chan];
     if( c->mode != SCOPE_MODE_STREAM ) return;
 
-    cfifo_push2( c->sampleQueue, sample );
+    atomq_enqueue( c->sampleQueue, sample );
 }
 
 void
@@ -412,14 +413,14 @@ scope_updateChannel( scope_t* scope, unsigned int chan ) {
         // Consume the sample from the appropriate buffer/fifo
         if( c->mode == SCOPE_MODE_STREAM ) {
             // The queue may be empty. In that case we abort and notify the user about the synchronization loss
-            if( cfifo_length( c->sampleQueue ) < c->samplesize )
+            if( atomq_estimateLength( c->sampleQueue ) < c->samplesize )
                 break;         
         }
         for( int j =0; j < c->samplesize; j++ ) {
             if( c->mode == SCOPE_MODE_STATIC ) {
                 s = sampler_getNext( c->sampler );
             } else if( c->mode == SCOPE_MODE_STREAM ) {
-                s = cfifo_take( c->sampleQueue );
+                atomq_dequeue( c->sampleQueue, &s );
             }
 
             // samplerBuffer will be used to draw the plot

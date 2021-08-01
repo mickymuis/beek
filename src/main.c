@@ -9,11 +9,13 @@
 #include "sampler.h"
 #include "cfifo.h"
 #include "atomq.h"
-#include "dsp.h"
-#include "dsp/passthrough.h"
-#include "dsp/lowpass.h"
+#include "flow.h"
+#include "stages/passthrough.h"
+#include "stages/lowpass.h"
+#include "stages/source.h"
+#include "stages/sink.h"
 
-dsp_t* DSP;
+flw_t* FLOW;
 
 void fakeThread( scope_t* scope ) {
     static int freq      =100;
@@ -31,16 +33,16 @@ void fakeThread( scope_t* scope ) {
     int delta =floorf(freq * elapsed);
 
     for( int i=0; i < delta; i++ ) {
-        dsp_tick( DSP );
-        scope_pushChannelFifo( scope, 0, DSP->workers[0]->out[0] );
-        scope_pushChannelFifo( scope, 1, DSP->workers[1]->out[0] );
-        scope_pushChannelFifo( scope, 1, DSP->workers[1]->out[0] -10. );
-        scope_pushChannelFifo( scope, 1, DSP->workers[1]->out[0] -20. );
-        scope_pushChannelFifo( scope, 1, DSP->workers[1]->out[0] -30. );
-        scope_pushChannelFifo( scope, 1, DSP->workers[1]->out[0] -40. );
-        scope_pushChannelFifo( scope, 1, DSP->workers[1]->out[0] -50. );
-        scope_pushChannelFifo( scope, 1, DSP->workers[1]->out[0] -60. );
-        scope_pushChannelFifo( scope, 1, DSP->workers[1]->out[0] -70. );
+/*        flw_tick( FLOW );
+        scope_pushChannelFifo( scope, 0, FLOW->stages[0]->out[0] );
+        scope_pushChannelFifo( scope, 1, FLOW->stages[1]->out[0] );
+        scope_pushChannelFifo( scope, 1, FLOW->stages[1]->out[0] -10. );
+        scope_pushChannelFifo( scope, 1, FLOW->stages[1]->out[0] -20. );
+        scope_pushChannelFifo( scope, 1, FLOW->stages[1]->out[0] -30. );
+        scope_pushChannelFifo( scope, 1, FLOW->stages[1]->out[0] -40. );
+        scope_pushChannelFifo( scope, 1, FLOW->stages[1]->out[0] -50. );
+        scope_pushChannelFifo( scope, 1, FLOW->stages[1]->out[0] -60. );
+        scope_pushChannelFifo( scope, 1, FLOW->stages[1]->out[0] -70. );*/
     }
 }
 
@@ -51,7 +53,7 @@ update( window_t* win, SDL_Rect area ) {
 
     fakeThread( s );
 
-   // scope_pushChannelFifo( s, 0, sampler_getNext( DSP->sampler ) );
+   // scope_pushChannelFifo( s, 0, sampler_getNext( FLOW->sampler ) );
 
    // scope_pushChannelFifo( s, 1, (double)rand() / (double)RAND_MAX - .5);
 
@@ -79,12 +81,6 @@ main( int argc, char**argv ) {
 
     sampler_setCyclic( s, true );
 
-    DSP =dsp_create();
-    DSP->sampler =s;
-    dsp_worker_t* passthrough =dsp_createPassThrough( 1 );
-    dsp_worker_t* lowpass     =dsp_createLowPass( 1 );
-    dsp_addWorker( DSP, passthrough );
-    dsp_addWorker( DSP, lowpass );
     
     window_t win;
     window_init( &win );
@@ -105,14 +101,36 @@ main( int argc, char**argv ) {
     scope_setChannelDrawStyle( scope, 1, SCOPE_DRAW_LINES );
     scope_lockChannelRange( scope, 1, 0 );
     scope_setChannelMultiSample( scope, 1, 8 );
+    
+    FLOW =flw_create();
+    flw_setFrequency( FLOW, 100 );
+    //FLOW->sampler =s;
+    flw_stage_t* source      =flw_createSampleSource( s, 1 );
+    flw_stage_t* passthrough =flw_createPassThrough( 1 );
+    flw_stage_t* lowpass     =flw_createLowPass( 1 );
+    flw_stage_t* sink        =flw_createScopeSink( scope, 0, 1 );
+    flw_addStage( FLOW, source );
+    flw_addStage( FLOW, passthrough );
+    flw_addStage( FLOW, lowpass );
+    flw_addStage( FLOW, sink );
+    flw_connect( FLOW, source, passthrough );
+    flw_connect( FLOW, passthrough, lowpass );
+    flw_connect( FLOW, lowpass, sink );
+
+    flw_printGraph( FLOW );
 
     win.on_redraw = (window_renderfunc_t)&update;
     win.user =scope;
+
+    flw_start( FLOW );
     window_mainloop( &win );
+    flw_stop( FLOW );
+
+    // Cleanup routine
     window_destroy( &win );
     scope_destroy( scope );
     sampler_destroy( s );
-    dsp_destroy( DSP );
+    flw_destroy( FLOW );
 
     return 0;
 }
