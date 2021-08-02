@@ -34,7 +34,7 @@ flw_stage_t*
 flw_createPassThrough( int port_size ) {
     flw_passthrough_t* p =malloc( sizeof(flw_passthrough_t) );
 
-    memset( p, 0, sizeof(flw_passthrough_t) );
+    flw_initStage( (flw_stage_t*)p );
 
     p->stage.destroy     =(flw_destroy_func_t)destroy;
     p->stage.consume     =(flw_consume_func_t)consume;

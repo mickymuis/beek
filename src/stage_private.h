@@ -26,6 +26,6 @@ struct flw_stage {
 /** Sets the memory occupied by a stage_t to zero and initializes its atomic variables.
  */
 void
-flw_stageInit( flw_stage_t* );
+flw_initStage( flw_stage_t* );
 
 #endif

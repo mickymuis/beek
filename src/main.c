@@ -10,10 +10,12 @@
 #include "cfifo.h"
 #include "atomq.h"
 #include "flow.h"
+#include "gaussian.h"
 #include "stages/passthrough.h"
 #include "stages/lowpass.h"
 #include "stages/source.h"
 #include "stages/sink.h"
+#include "stages/scalespace.h"
 
 flw_t* FLOW;
 
@@ -63,6 +65,7 @@ update( window_t* win, SDL_Rect area ) {
 
 int
 main( int argc, char**argv ) {
+
     if( argc < 2 ) return 0;
     sampler_t *s;
     FILE* f =fopen( argv[1], "r" );
@@ -89,33 +92,37 @@ main( int argc, char**argv ) {
         return -1;
     }
 
-    scope_t* scope = scope_create( 2, win.render );
+    scope_t* scope = scope_create( 1, win.render );
     scope_setFrequency( scope, 100 );
     //scope_initChannel( scope, 0, SCOPE_MODE_STATIC );
     //scope_setChannelBuffer( scope, 0, s );
     scope_initChannel( scope, 0, SCOPE_MODE_STREAM );
     scope_setChannelDrawStyle( scope, 0, SCOPE_DRAW_LINES );
     scope_setChannelVerticalMode( scope, 0, SCOPE_VRANGE_AUTO_OPTIMAL );
-    //scope_setChannelMultiSample( scope, 0, 2 );
-    scope_initChannel( scope, 1, SCOPE_MODE_STREAM );
+    scope_setChannelMultiSample( scope, 0, 4 );
+/*    scope_initChannel( scope, 1, SCOPE_MODE_STREAM );
     scope_setChannelDrawStyle( scope, 1, SCOPE_DRAW_LINES );
     scope_lockChannelRange( scope, 1, 0 );
-    scope_setChannelMultiSample( scope, 1, 8 );
+    scope_setChannelMultiSample( scope, 1, 8 );*/
     
     FLOW =flw_create();
     flw_setFrequency( FLOW, 100 );
     //FLOW->sampler =s;
     flw_stage_t* source      =flw_createSampleSource( s, 1 );
-    flw_stage_t* passthrough =flw_createPassThrough( 1 );
-    flw_stage_t* lowpass     =flw_createLowPass( 1 );
-    flw_stage_t* sink        =flw_createScopeSink( scope, 0, 1 );
+    //flw_stage_t* passthrough =flw_createPassThrough( 1 );
+    //flw_stage_t* lowpass     =flw_createLowPass( 1 );
+    flw_stage_t* sst         =flw_createScaleSpaceTransform( 4 );
+    flw_stage_t* sink        =flw_createScopeSink( scope, 0, 4 );
     flw_addStage( FLOW, source );
-    flw_addStage( FLOW, passthrough );
-    flw_addStage( FLOW, lowpass );
+    //flw_addStage( FLOW, passthrough );
+    //flw_addStage( FLOW, lowpass );
+    flw_addStage( FLOW, sst );
     flw_addStage( FLOW, sink );
-    flw_connect( FLOW, source, passthrough );
-    flw_connect( FLOW, passthrough, lowpass );
-    flw_connect( FLOW, lowpass, sink );
+    //flw_connect( FLOW, source, passthrough );
+    //flw_connect( FLOW, passthrough, lowpass );
+    //flw_connect( FLOW, lowpass, sink );
+    flw_connect( FLOW, source, sst );
+    flw_connect( FLOW, sst, sink );
 
     flw_printGraph( FLOW );
 

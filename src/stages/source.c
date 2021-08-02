@@ -33,7 +33,7 @@ flw_createSampleSource( sampler_t* sampler, int port_size ) {
     flw_samplesource_t* ss =malloc( sizeof(flw_samplesource_t) );
     assert( sampler && port_size > 0 );
 
-    memset( ss, 0, sizeof(flw_samplesource_t) );
+    flw_initStage( (flw_stage_t*)ss );
 
     ss->stage.destroy     = (flw_destroy_func_t)destroy;
     ss->stage.consume     = (flw_consume_func_t)consume;

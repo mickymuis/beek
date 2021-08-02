@@ -34,7 +34,7 @@ flw_createScopeSink( scope_t* scope, unsigned int channel, int port_size ) {
     flw_scopesink_t* ss =malloc( sizeof(flw_scopesink_t) );
     assert( scope && port_size > 0 );
 
-    memset( ss, 0, sizeof(flw_scopesink_t) );
+    flw_initStage( (flw_stage_t*)ss );
 
     ss->stage.destroy     = (flw_destroy_func_t)destroy;
     ss->stage.consume     = (flw_consume_func_t)consume;

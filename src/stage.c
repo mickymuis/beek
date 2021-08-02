@@ -13,7 +13,7 @@ flw_destroyStage( flw_stage_t* stage ) {
 }
 
 void
-flw_stageInit( flw_stage_t* st ) {
+flw_initStage( flw_stage_t* st ) {
     assert( st != NULL );
 
     memset( st, 0, sizeof(flw_stage_t) );

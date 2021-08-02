@@ -42,7 +42,7 @@ cfifo_length( cfifo_t* );
 size_t
 cfifo_capacity( cfifo_t* );
 
-/** Returns true if the buffer is filled to capacity. In this case, cfifo_push() will overwrite the first item */
+/** Returns true if the buffer is filled to capacity. In this case, cfifo_push2() will overwrite the first item */
 bool
 cfifo_full( cfifo_t* );
 

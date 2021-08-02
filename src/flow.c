@@ -50,6 +50,8 @@ static int
 flw_main( void* arg ) {
     flw_t* flw =(flw_t*)arg;
 
+    struct timespec ival = {.tv_sec = 0, .tv_nsec = 10e9L / flw->frequency};
+
     while( !atomic_load( &flw->stop ) ) {
     
         uint64_t time =0UL;
@@ -69,7 +71,7 @@ flw_main( void* arg ) {
             flw_tick( flw );
         }
 
-        thrd_yield();
+        thrd_sleep( &ival, NULL );
     }
     return 0;
 }
@@ -143,7 +145,7 @@ flw_removeStage( flw_t* flw, flw_stage_t* stage ) {
 bool
 flw_connect( flw_t* flw, flw_stage_t* stage1, flw_stage_t* stage2 ) {
     assert( flw != NULL && stage1 != NULL && stage2 != NULL );
-    if( flw->running ) return;
+    if( flw->running ) return false;
     // So much can go wrong...
     if( !flw_containsStage( flw, stage1 ) || !flw_containsStage( flw, stage2 ) ) {
         fprintf( stderr, "flw_connect(): stage(s) not in flow\n" );

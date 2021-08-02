@@ -37,7 +37,7 @@ flw_stage_t*
 flw_createLowPass( int port_size ) {
     flw_lowpass_t* l =malloc( sizeof(flw_lowpass_t) );
 
-    memset( l, 0, sizeof(flw_lowpass_t) );
+    flw_initStage( (flw_stage_t*)l );
 
     l->avg =malloc( port_size * sizeof(double) );
 
