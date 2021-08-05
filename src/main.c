@@ -92,18 +92,31 @@ main( int argc, char**argv ) {
         return -1;
     }
 
-    scope_t* scope = scope_create( 1, win.render );
+    scope_t* scope = scope_create( 6, win.render );
     scope_setFrequency( scope, 100 );
     //scope_initChannel( scope, 0, SCOPE_MODE_STATIC );
     //scope_setChannelBuffer( scope, 0, s );
     scope_initChannel( scope, 0, SCOPE_MODE_STREAM );
     scope_setChannelDrawStyle( scope, 0, SCOPE_DRAW_LINES );
     scope_setChannelVerticalMode( scope, 0, SCOPE_VRANGE_AUTO_OPTIMAL );
-    scope_setChannelMultiSample( scope, 0, 4 );
-/*    scope_initChannel( scope, 1, SCOPE_MODE_STREAM );
+//    scope_setChannelSampleSize( scope, 0, 4 );
+    scope_initChannel( scope, 1, SCOPE_MODE_STREAM );
     scope_setChannelDrawStyle( scope, 1, SCOPE_DRAW_LINES );
-    scope_lockChannelRange( scope, 1, 0 );
-    scope_setChannelMultiSample( scope, 1, 8 );*/
+    scope_setChannelVerticalMode( scope, 1, SCOPE_VRANGE_AUTO_OPTIMAL );
+/*    scope_lockChannelRange( scope, 1, 0 );
+    scope_setChannelSampleSize( scope, 1, 8 );*/
+    scope_initChannel( scope, 2, SCOPE_MODE_STREAM );
+    scope_setChannelDrawStyle( scope, 2, SCOPE_DRAW_LINES );
+    scope_setChannelVerticalMode( scope, 2, SCOPE_VRANGE_AUTO_OPTIMAL );
+    scope_initChannel( scope, 3, SCOPE_MODE_STREAM );
+    scope_setChannelDrawStyle( scope, 3, SCOPE_DRAW_LINES );
+    scope_setChannelVerticalMode( scope, 3, SCOPE_VRANGE_AUTO_OPTIMAL );
+    scope_initChannel( scope, 4, SCOPE_MODE_STREAM );
+    scope_setChannelDrawStyle( scope, 4, SCOPE_DRAW_LINES );
+    scope_setChannelVerticalMode( scope, 4, SCOPE_VRANGE_AUTO_OPTIMAL );
+    scope_initChannel( scope, 5, SCOPE_MODE_STREAM );
+    scope_setChannelDrawStyle( scope, 5, SCOPE_DRAW_LINES );
+    scope_setChannelVerticalMode( scope, 5, SCOPE_VRANGE_AUTO_OPTIMAL );
     
     FLOW =flw_create();
     flw_setFrequency( FLOW, 100 );
@@ -111,8 +124,8 @@ main( int argc, char**argv ) {
     flw_stage_t* source      =flw_createSampleSource( s, 1 );
     //flw_stage_t* passthrough =flw_createPassThrough( 1 );
     //flw_stage_t* lowpass     =flw_createLowPass( 1 );
-    flw_stage_t* sst         =flw_createScaleSpaceTransform( 4 );
-    flw_stage_t* sink        =flw_createScopeSink( scope, 0, 4 );
+    flw_stage_t* sst         =flw_createScaleSpaceTransform( 6 );
+    flw_stage_t* sink        =flw_createScopeSink( scope, 0, 6 );
     flw_addStage( FLOW, source );
     //flw_addStage( FLOW, passthrough );
     //flw_addStage( FLOW, lowpass );

@@ -22,10 +22,19 @@ consume( flw_stage_t* stage ) {
     if( atomq_estimateLength( stage->inq ) < stage->inPortSize )
         return;
 
+    int chan =ss->channel;
+    int n    =scope_channelSampleSize( ss->scope, chan );
+
     for( int i=0; i < stage->inPortSize; i++ ) {
         double in;
         atomq_dequeue( stage->inq, &in );
-        scope_pushChannelFifo( ss->scope, ss->channel, in );
+
+        if( n == 0 ) {
+            chan++;
+            n =scope_channelSampleSize( ss->scope, chan );
+        }
+        scope_pushChannelFifo( ss->scope, chan, in );
+        n--;
     }
 }
 

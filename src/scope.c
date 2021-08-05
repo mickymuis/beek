@@ -104,6 +104,12 @@ scope_destroy( scope_t* s ) {
     free( s );
 }
 
+unsigned int
+scope_channelCount( scope_t* scope ) {
+    assert( scope );
+    return scope->nchannels;
+}
+
 void
 scope_setFrequency( scope_t* scope, unsigned int freq ) {
     assert( scope );
@@ -140,7 +146,7 @@ scope_initChannel( scope_t* scope, unsigned int chan, int mode ) {
 }
 
 void
-scope_setChannelMultiSample( scope_t* scope, unsigned int chan, unsigned int sampleSize ) {
+scope_setChannelSampleSize( scope_t* scope, unsigned int chan, unsigned int sampleSize ) {
     assert( scope );
     if( chan >= scope->nchannels ) return;
     if( sampleSize < 1 ) return;
@@ -148,6 +154,15 @@ scope_setChannelMultiSample( scope_t* scope, unsigned int chan, unsigned int sam
     schannel_t* c =&scope->channel[chan];
     c->samplesize =sampleSize;
 
+}
+
+unsigned int
+scope_channelSampleSize( scope_t* scope, unsigned int chan ) {
+    assert( scope );
+    if( chan >= scope->nchannels ) return 0;
+    
+    schannel_t* c =&scope->channel[chan];
+    return c->samplesize;
 }
 
 void

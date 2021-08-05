@@ -37,6 +37,9 @@ scope_create( unsigned int nchannels, SDL_Renderer* render );
 void
 scope_destroy( scope_t* scope );
 
+unsigned int
+scope_channelCount( scope_t* scope );
+
 /** Sets the number of samples per second to @freq. 
     The view will move at this rate and scope_update() will consume samples at this rate */
 void
@@ -49,7 +52,10 @@ scope_initChannel( scope_t* scope, unsigned int chan, int mode );
 
 /** Tells the channel @chan how many consecutive elements in the buffer make up one sample (default is 1). */
 void
-scope_setChannelMultiSample( scope_t* scope, unsigned int chan, unsigned int sampleSize );
+scope_setChannelSampleSize( scope_t* scope, unsigned int chan, unsigned int sampleSize );
+
+unsigned int
+scope_channelSampleSize( scope_t* scope, unsigned int chan );
 
 /** Sets the static buffer of channel @chan to be @sampler. @sampler position will be modified as scope may call sampler_getNext() on it.
     On scope channels that do not have mode equal to SCOPE_CHANNEL_STATIC this function will have no effect. */
