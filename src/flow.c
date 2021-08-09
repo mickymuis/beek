@@ -42,7 +42,7 @@ flw_tick( flw_t* flw ) {
         do {
             stage2->consume( stage2 );
             stage2 =stage2->outStage;
-        } while( stage2 != NULL );
+        } while( stage2 != NULL && stage2 != stage1 );
     }
 }
 
@@ -50,12 +50,13 @@ static int
 flw_main( void* arg ) {
     flw_t* flw =(flw_t*)arg;
 
-    struct timespec ival = {.tv_sec = 0, .tv_nsec = 10e9L / flw->frequency};
+    struct timespec interval = {.tv_sec = 0, .tv_nsec = 1e9L / (long)flw->frequency};
+    struct timespec ival, remain;
+    //uint64_t time =0UL;
 
     while( !atomic_load( &flw->stop ) ) {
     
-        uint64_t time =0UL;
-        uint64_t now  =SDL_GetPerformanceCounter();
+      /*  uint64_t now  =SDL_GetPerformanceCounter();
         double elapsed;
         if( time == 0UL ) {
             elapsed =1.f;
@@ -69,9 +70,18 @@ flw_main( void* arg ) {
 
         for( int i=0; i < delta; i++ ) {
             flw_tick( flw );
-        }
+        }*/
 
-        thrd_sleep( &ival, NULL );
+        flw_tick( flw );
+
+        ival =interval;
+
+        while(1) { 
+            thrd_sleep( &ival, &remain );
+            // Make sure we have slept the correct amount
+            if( remain.tv_sec == 0 && remain.tv_nsec == 0 ) break;
+            ival =remain;
+        }
     }
     return 0;
 }

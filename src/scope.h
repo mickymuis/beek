@@ -7,7 +7,7 @@
 #include "cfifo.h"
 
 static const size_t SCOPE_MAX_LENGTH   = 65535;
-static const size_t SCOPE_FIFO_DEPTH   = 1024;
+static const size_t SCOPE_FIFO_DEPTH   = 2048;
 
 enum scope_channelSampleMode {
     SCOPE_MODE_NONE,

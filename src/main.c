@@ -93,30 +93,24 @@ main( int argc, char**argv ) {
     }
 
     scope_t* scope = scope_create( 6, win.render );
-    scope_setFrequency( scope, 100 );
-    //scope_initChannel( scope, 0, SCOPE_MODE_STATIC );
-    //scope_setChannelBuffer( scope, 0, s );
+    scope_setFrequency( scope, 200 );
+    /*scope_initChannel( scope, 0, SCOPE_MODE_STATIC );
+    scope_setChannelBuffer( scope, 0, s );
     scope_initChannel( scope, 0, SCOPE_MODE_STREAM );
     scope_setChannelDrawStyle( scope, 0, SCOPE_DRAW_LINES );
     scope_setChannelVerticalMode( scope, 0, SCOPE_VRANGE_AUTO_OPTIMAL );
-//    scope_setChannelSampleSize( scope, 0, 4 );
-    scope_initChannel( scope, 1, SCOPE_MODE_STREAM );
+    scope_setChannelSampleSize( scope, 0, 4 );
+    cope_initChannel( scope, 1, SCOPE_MODE_STREAM );
     scope_setChannelDrawStyle( scope, 1, SCOPE_DRAW_LINES );
     scope_setChannelVerticalMode( scope, 1, SCOPE_VRANGE_AUTO_OPTIMAL );
-/*    scope_lockChannelRange( scope, 1, 0 );
+    scope_lockChannelRange( scope, 1, 0 );
     scope_setChannelSampleSize( scope, 1, 8 );*/
-    scope_initChannel( scope, 2, SCOPE_MODE_STREAM );
-    scope_setChannelDrawStyle( scope, 2, SCOPE_DRAW_LINES );
-    scope_setChannelVerticalMode( scope, 2, SCOPE_VRANGE_AUTO_OPTIMAL );
-    scope_initChannel( scope, 3, SCOPE_MODE_STREAM );
-    scope_setChannelDrawStyle( scope, 3, SCOPE_DRAW_LINES );
-    scope_setChannelVerticalMode( scope, 3, SCOPE_VRANGE_AUTO_OPTIMAL );
-    scope_initChannel( scope, 4, SCOPE_MODE_STREAM );
-    scope_setChannelDrawStyle( scope, 4, SCOPE_DRAW_LINES );
-    scope_setChannelVerticalMode( scope, 4, SCOPE_VRANGE_AUTO_OPTIMAL );
-    scope_initChannel( scope, 5, SCOPE_MODE_STREAM );
-    scope_setChannelDrawStyle( scope, 5, SCOPE_DRAW_LINES );
-    scope_setChannelVerticalMode( scope, 5, SCOPE_VRANGE_AUTO_OPTIMAL );
+    for( int i =0; i < 6; i++ ) {
+        scope_initChannel( scope, i, SCOPE_MODE_STREAM );
+        scope_setChannelDrawStyle( scope, i, SCOPE_DRAW_LINES );
+//        scope_setChannelVerticalMode( scope, i SCOPE_VRANGE_AUTO_OPTIMAL );
+        scope_setChannelVerticalRange( scope, i, -1, 1 );
+    }
     
     FLOW =flw_create();
     flw_setFrequency( FLOW, 100 );
@@ -136,6 +130,7 @@ main( int argc, char**argv ) {
     //flw_connect( FLOW, lowpass, sink );
     flw_connect( FLOW, source, sst );
     flw_connect( FLOW, sst, sink );
+    //flw_connect( FLOW, source, sink );
 
     flw_printGraph( FLOW );
 

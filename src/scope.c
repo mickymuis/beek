@@ -41,9 +41,9 @@ struct scope_t {
 static uint8_t Palette[N_COLORS][3] = {
     { 15,  96,  63  },  // dull green
     { 15,  255, 63  },  // green
-    { 255, 127,  15  }, // amber
+    { 255, 127,  15 },  // amber
     { 196, 63,  255 },  // violet
-    { 255, 235, 45 },   // yellow
+    { 255, 235, 45  },  // yellow
     { 63,  63,  255 },  // blue
     { 255, 15,  96  },  // fushia
     { 15,  255, 215 },  // cyan
@@ -182,7 +182,8 @@ scope_pushChannelFifo( scope_t* scope, unsigned int chan, double sample ) {
     schannel_t* c =&scope->channel[chan];
     if( c->mode != SCOPE_MODE_STREAM ) return;
 
-    atomq_enqueue( c->sampleQueue, sample );
+    if( !atomq_enqueue( c->sampleQueue, sample ) )
+        printf( "The apocalypse!\n\n" );
 }
 
 void
@@ -445,6 +446,7 @@ scope_updateChannel( scope_t* scope, unsigned int chan ) {
         }
     }
 
+    // Compute the actual frequency
     c->asamples += i;
     if( c->asamples > scope->freq ) {
         c->afreq    = (float)c->asamples / ((float)(scope->time - c->atime) / scope->ticksPerSec);
