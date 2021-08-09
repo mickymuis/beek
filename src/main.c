@@ -41,13 +41,6 @@ void fakeThread( scope_t* scope ) {
 void
 update( window_t* win, SDL_Rect area ) {
     scope_t *s = (scope_t*)win->user;
- //   s->elapsed =.01f;
-
-    fakeThread( s );
-
-   // scope_pushChannelFifo( s, 0, sampler_getNext( FLOW->sampler ) );
-
-   // scope_pushChannelFifo( s, 1, (double)rand() / (double)RAND_MAX - .5);
 
     scope_updateDrawingArea( s, area );
     scope_update( s );
