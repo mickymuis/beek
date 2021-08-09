@@ -21,15 +21,12 @@ HEADERS = src/window.h src/sampler.h src/cfifo.h src/atomq.h src/scope.h \
 	  src/stages/passthrough.h src/stages/lowpass.h src/stages/source.h src/stages/sink.h src/stages/scalespace.h\
 	  src/SDL_FontCache/SDL_FontCache.h
 
-all: $(EXEC)
+all: $(DIRS) $(EXEC)
 
 $(EXEC): $(OBJS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
-build/%.o: src/%.c $(HEADERS) $(DIRS)
-	$(CC) $(CFLAGS) -c $< -o $@ 
-
-build/flw/%.o: src/flw/%.c $(HEADERS) $(DIRS)
+build/%.o: src/%.c $(HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@ 
 
 $(DIRS):
