@@ -43,6 +43,9 @@ tmr_destroy( tmr_t* );
 void
 tmr_setFrequency( tmr_t*, float freq );
 
+float
+tmr_getFrequency( const tmr_t* );
+
 /** Sleeps the current thread until the timer interval has elapsed.
     @mutex must be initialized and locked by the current thread.
     If the timer is not running, this function returns immediately. 
@@ -52,7 +55,7 @@ tmr_wait( tmr_t*, mtx_t* mutex );
 
 /** Returns the number of ticks elapsed since tmr_start() was called */
 ttick_t
-tmr_ticksElapsed( tmr_t* );
+tmr_ticksElapsed( const tmr_t* );
 
 /** Creates a new thread for the timer and returns immediately.
     Nothing happens if the timer is already running. */

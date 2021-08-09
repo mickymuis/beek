@@ -9,29 +9,20 @@
 #include <math.h>
 
 #include "stage_private.h"
-// TODO: Replace with another clock/timer
-#include <SDL2/SDL.h>
+#include "timer.h"
 
 struct flw {
     flw_stage_t**       stages;
     int                 stages_size;
     int                 nstages; 
-    int                 frequency;
     bool                running;
     atomic_bool         stop;
     thrd_t              thread;
+    tmr_t*              clock;
 };
 
 static inline void
 flw_tick( flw_t* flw ) {
-/*    double sample =sampler_getNext( flw->sampler );
-    for( int i =0; i < flw->stages_size; i++ ) {
-        flw_stage_t *stage =flw->stages[i];
-
-        stage->in[0] = sample;
-        stage->consume( stage );
-
-    }*/
     for( int i =0; i < flw->stages_size; i++ ) {
         flw_stage_t* stage1 =flw->stages[i];
         // Find stages that are not NULL and have no input ('sources')
@@ -50,39 +41,17 @@ static int
 flw_main( void* arg ) {
     flw_t* flw =(flw_t*)arg;
 
-    struct timespec interval = {.tv_sec = 0, .tv_nsec = 1e9L / (long)flw->frequency};
-    struct timespec ival, remain;
-    //uint64_t time =0UL;
+    mtx_t clock_sync;
+    mtx_init( &clock_sync, mtx_plain );
+    mtx_lock( &clock_sync );
 
     while( !atomic_load( &flw->stop ) ) {
+
+        tmr_wait( flw->clock, &clock_sync );
     
-      /*  uint64_t now  =SDL_GetPerformanceCounter();
-        double elapsed;
-        if( time == 0UL ) {
-            elapsed =1.f;
-        } else {
-            elapsed =(double)(now - time) / (double)SDL_GetPerformanceFrequency();
-        }
-
-        time =SDL_GetPerformanceCounter();
-
-        int delta =floorf(flw->frequency * elapsed);
-
-        for( int i=0; i < delta; i++ ) {
-            flw_tick( flw );
-        }*/
-
         flw_tick( flw );
-
-        ival =interval;
-
-        while(1) { 
-            thrd_sleep( &ival, &remain );
-            // Make sure we have slept the correct amount
-            if( remain.tv_sec == 0 && remain.tv_nsec == 0 ) break;
-            ival =remain;
-        }
     }
+    mtx_destroy( &clock_sync );
     return 0;
 }
 
@@ -90,6 +59,7 @@ flw_t*
 flw_create() {
     flw_t* flw = malloc( sizeof( struct flw ) );
     memset( flw, 0, sizeof( struct flw ) );
+    flw->clock =tmr_create();
 
     return flw;
 }
@@ -98,6 +68,7 @@ void
 flw_destroy( flw_t* flw ) {
     if( flw == NULL ) return;
     if( flw->stages != NULL ) free( flw->stages );
+    tmr_destroy( flw->clock );
     free( flw );
 }
 
@@ -208,7 +179,7 @@ flw_setFrequency( flw_t* flw, int freq ) {
     assert( flw != NULL );
     if( flw->running ) return;
 
-    flw->frequency =freq;
+    tmr_setFrequency( flw->clock, freq );
 }
 
 void
@@ -219,6 +190,7 @@ flw_start( flw_t* flw ) {
     atomic_store( &flw->stop, false );
     flw->running =true;
     thrd_create( &flw->thread, flw_main, flw );
+    tmr_start( flw->clock );
 }
 
 void
@@ -228,6 +200,7 @@ flw_stop( flw_t* flw ) {
         atomic_store( &flw->stop, true );
         int res;
         thrd_join( flw->thread, &res );
+        tmr_stop( flw->clock );
         flw->running =false;
     }
 }

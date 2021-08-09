@@ -66,7 +66,7 @@ scope_setChannelBuffer( scope_t* scope, unsigned int chan, sampler_t* sampler );
     If samples are pushed at a higher rate than scope_update() consumes them, samples may get lost. 
     scope_setSpeed() sets this rate, while scope_update() must be called often enough to keep the internal FIFO from overflowing.
     On scope channels that do not have mode equal to SCOPE_CHANNEL_STREAM this function will have no effect. */
-void
+bool
 scope_pushChannelFifo( scope_t* scope, unsigned int chan, double sample );
 
 /** Sets the channel's drawing style to either SCOPE_CHANNEL_POINTS or SCOPE_CHANNEL_LINES */

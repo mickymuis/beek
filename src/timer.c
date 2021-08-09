@@ -17,7 +17,7 @@ static void
 set_interval( struct timespec* ts, float freq ) {
     float ival    =1.f / freq;
     ts->tv_sec    =(int)ival;
-    ts->tv_nsec   =(long)((float)10e9L * (ival - ts->tv_sec));
+    ts->tv_nsec   =(long)((float)1e9L * (ival - ts->tv_sec));
 }
 
 /** Timer thread function */
@@ -67,6 +67,12 @@ tmr_setFrequency( tmr_t* t, float freq ) {
     t->frequency =freq;
 }
 
+float
+tmr_getFrequency( const tmr_t* t ) {
+    assert( t != NULL );
+    return t->frequency;
+}
+
 void
 tmr_wait( tmr_t* t, mtx_t* mutex ) {
     assert( t != NULL );
@@ -80,7 +86,7 @@ tmr_wait( tmr_t* t, mtx_t* mutex ) {
 }
 
 ttick_t
-tmr_ticksElapsed( tmr_t* t ) {
+tmr_ticksElapsed( const tmr_t* t ) {
     assert( t != NULL );
     return atomic_load_explicit( &t->ticks, memory_order_acquire );
 }
@@ -93,6 +99,7 @@ tmr_start( tmr_t* t ) {
     atomic_store( &t->ticks, 0 );
 
     set_interval( &t->interval, t->frequency );
+    t->running =true;
 
     return thrd_create( &t->thread, (thrd_start_t)tmr_main, (void*)t ) == thrd_success;
 }
@@ -104,4 +111,6 @@ tmr_stop( tmr_t* t ) {
 
     atomic_store( &t->stop, true );
     thrd_join( t->thread, NULL );
+
+    t->running =false;
 }

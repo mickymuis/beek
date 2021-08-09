@@ -25,6 +25,7 @@ consume( flw_stage_t* stage ) {
     int chan =ss->channel;
     int n    =scope_channelSampleSize( ss->scope, chan );
 
+    // Distribute the samples over multiple channels if needed
     for( int i=0; i < stage->inPortSize; i++ ) {
         double in;
         atomq_dequeue( stage->inq, &in );

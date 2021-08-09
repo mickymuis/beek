@@ -18,7 +18,7 @@
 #include "stages/scalespace.h"
 
 flw_t* FLOW;
-
+/*
 void fakeThread( scope_t* scope ) {
     static int freq      =100;
     static uint64_t time =0UL;
@@ -35,18 +35,8 @@ void fakeThread( scope_t* scope ) {
     int delta =floorf(freq * elapsed);
 
     for( int i=0; i < delta; i++ ) {
-/*        flw_tick( FLOW );
-        scope_pushChannelFifo( scope, 0, FLOW->stages[0]->out[0] );
-        scope_pushChannelFifo( scope, 1, FLOW->stages[1]->out[0] );
-        scope_pushChannelFifo( scope, 1, FLOW->stages[1]->out[0] -10. );
-        scope_pushChannelFifo( scope, 1, FLOW->stages[1]->out[0] -20. );
-        scope_pushChannelFifo( scope, 1, FLOW->stages[1]->out[0] -30. );
-        scope_pushChannelFifo( scope, 1, FLOW->stages[1]->out[0] -40. );
-        scope_pushChannelFifo( scope, 1, FLOW->stages[1]->out[0] -50. );
-        scope_pushChannelFifo( scope, 1, FLOW->stages[1]->out[0] -60. );
-        scope_pushChannelFifo( scope, 1, FLOW->stages[1]->out[0] -70. );*/
     }
-}
+}*/
 
 void
 update( window_t* win, SDL_Rect area ) {

@@ -175,15 +175,14 @@ scope_setChannelBuffer( scope_t* scope, unsigned int chan, sampler_t* sampler ) 
     c->sampler =sampler;
 }
 
-void
+bool
 scope_pushChannelFifo( scope_t* scope, unsigned int chan, double sample ) {
     assert( scope );
-    if( chan >= scope->nchannels ) return;
+    if( chan >= scope->nchannels ) return false;
     schannel_t* c =&scope->channel[chan];
-    if( c->mode != SCOPE_MODE_STREAM ) return;
+    if( c->mode != SCOPE_MODE_STREAM ) return false;
 
-    if( !atomq_enqueue( c->sampleQueue, sample ) )
-        printf( "The apocalypse!\n\n" );
+    return atomq_enqueue( c->sampleQueue, sample );
 }
 
 void
